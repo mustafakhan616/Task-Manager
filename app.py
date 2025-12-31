@@ -1,67 +1,204 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
-# -------------------------------
-# Step 1: Initialize Flask App
-# -------------------------------
+# -----------------------
+# App setup
+# -----------------------
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'learning-secret-key'  # needed for session
 
-# -------------------------------
-# Step 2: Configure Database (absolute path)
-# -------------------------------
-basedir = os.path.abspath(os.path.dirname(__file__))  # Current folder of app.py
-db_path = os.path.join(basedir, "tasks.db")          # Full path to tasks.db
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(basedir,'tasks.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# -------------------------------
-# Step 3: Define Task Model
-# -------------------------------
+# -----------------------
+# Database Models
+# -----------------------
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+
+    first_name = db.Column(db.String(50), nullable=False)
+    last_name = db.Column(db.String(50), nullable=False)
+    father_name = db.Column(db.String(50), nullable=False)
+    age = db.Column(db.Integer, nullable=False)
+
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+
+
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
-    status = db.Column(db.String(20), default="pending")  # pending/done
+    status = db.Column(db.String(20), default="pending")
 
-# -------------------------------
-# Step 4: Routes
-# -------------------------------
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
-# Home route
-@app.route("/")
+# -----------------------
+# Helper: login check
+# -----------------------
+def login_required():
+    return "user_id" in session
+
+# -----------------------
+# ROUTES
+# -----------------------
+
+# HOME (just info)
+@app.route("/", methods=["GET"])
 def home():
-    return "Hello World! Welcome to Task Manager."
+    return jsonify({
+        "message": "Welcome",
+        "routes": ["/register", "/login", "/tasks", "/logout"]
+    })
 
-# GET /tasks -> Fetch all tasks
+
+# -----------------------
+# REGISTER
+# -----------------------
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.get_json()
+
+    # 1. Get data
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    father_name = data.get("father_name")
+    age = data.get("age")
+    username = data.get("username")
+    password = data.get("password")
+    confirm_password = data.get("confirm_password")
+
+    # 2. Validate
+    if not all([first_name, last_name, father_name, age, username, password, confirm_password]):
+        return jsonify({"error": "All fields are required"}), 400
+
+    if password != confirm_password:
+        return jsonify({"error": "Passwords do not match"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already exists"}), 400
+
+    # 3. Hash password (SIMPLE & SAFE)
+    hashed_password = generate_password_hash(password)
+
+    # 4. Save user
+    user = User(
+        first_name=first_name,
+        last_name=last_name,
+        father_name=father_name,
+        age=age,
+        username=username,
+        password_hash=hashed_password
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+
+# -----------------------
+# LOGIN
+# -----------------------
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+
+    username = data.get("username")
+    password = data.get("password")
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    # Create session
+    session["user_id"] = user.id
+
+    return jsonify({"message": "Login successful"}), 200
+
+
+# -----------------------
+# LOGOUT
+# -----------------------
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"message": "Logged out"}), 200
+
+
+# -----------------------
+# TASKS
+# -----------------------
 @app.route("/tasks", methods=["GET"])
 def get_tasks():
-    tasks = Task.query.all()
-    output = [{"id": t.id, "title": t.title, "status": t.status} for t in tasks]
-    return jsonify(output), 200
+    if not login_required():
+        return jsonify({"error": "Login required"}), 401
 
-# POST /tasks -> Create a new task
+    tasks = Task.query.filter_by(user_id=session["user_id"]).all()
+
+    return jsonify([
+        {"id": t.id, "title": t.title, "status": t.status}
+        for t in tasks
+    ])
+
+
 @app.route("/tasks", methods=["POST"])
 def add_task():
+    if not login_required():
+        return jsonify({"error": "Login required"}), 401
+
     data = request.get_json()
-    task_title = data.get("title")
+    title = data.get("title")
 
-    if task_title:
-        new_task = Task(title=task_title)
-        db.session.add(new_task)
-        db.session.commit()
-        return jsonify({
-            "message": "Task added",
-            "task": {"id": new_task.id, "title": new_task.title, "status": new_task.status}
-        }), 201
+    if not title:
+        return jsonify({"error": "Title required"}), 400
 
-    return jsonify({"error": "Task title is required"}), 400
+    task = Task(title=title, user_id=session["user_id"])
+    db.session.add(task)
+    db.session.commit()
 
-# -------------------------------
-# Step 5: Run App & Create DB
-# -------------------------------
+    return jsonify({"message": "Task added"}), 201
+
+
+@app.route("/tasks/<int:id>", methods=["PUT"])
+def update_task(id):
+    if not login_required():
+        return jsonify({"error": "Login required"}), 401
+
+    task = Task.query.filter_by(id=id, user_id=session["user_id"]).first()
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+
+    data = request.get_json()
+    task.title = data.get("title", task.title)
+    task.status = data.get("status", task.status)
+
+    db.session.commit()
+    return jsonify({"message": "Task updated"})
+
+
+@app.route("/tasks/<int:id>", methods=["DELETE"])
+def delete_task(id):
+    if not login_required():
+        return jsonify({"error": "Login required"}), 401
+
+    task = Task.query.filter_by(id=id, user_id=session["user_id"]).first()
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+
+    db.session.delete(task)
+    db.session.commit()
+    return jsonify({"message": "Task deleted"})
+
+
+# -----------------------
+# RUN
+# -----------------------
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()  # Creates tasks table in tasks.db inside TaskManager folder
+        db.create_all()
     app.run(debug=True)
