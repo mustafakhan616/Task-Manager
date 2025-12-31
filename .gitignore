@@ -1,13 +1,13 @@
-    # Python virtual environment
+# Python virtual environment
+venv/
 .venv/
 
-# PyCharm project files
+# SQLite database
+tasks.db
+
+# IDE files
 .idea/
+*.iml
 
-# Python cache files
-__pycache__/
-*.pyc
-
-# Optional: OS files
-.DS_Store
-Thumbs.db
+# Flask instance folder (if exists)
+instance/
