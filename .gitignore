@@ -9,5 +9,5 @@ tasks.db
 .idea/
 *.iml
 
-# Flask instance folder (if exists)
+# Flask instance folder
 instance/

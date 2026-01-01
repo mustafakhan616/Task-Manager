@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+from flask import request, redirect, render_template
 
 # -----------------------
 # App setup
@@ -48,12 +49,27 @@ def login_required():
 # -----------------------
 
 # HOME (just info)
+
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({
-        "message": "Welcome",
-        "routes": ["/register", "/login", "/tasks", "/logout"]
-    })
+    return render_template("home.html")
+
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    return render_template("login.html")
+
+
+@app.route("/register", methods=["GET"])
+def register_page():
+    return render_template("register.html")
+
+
+@app.route("/dashboard", methods=["GET"])
+def dashboard_page():
+    if "user_id" not in session:
+        return redirect("/login")
+    return render_template("dashboard.html")
 
 
 # -----------------------
@@ -61,9 +77,10 @@ def home():
 # -----------------------
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json()  # expects JSON from JS
+    if not data:
+        return jsonify({"error": "No data received"}), 400
 
-    # 1. Get data
     first_name = data.get("first_name")
     last_name = data.get("last_name")
     father_name = data.get("father_name")
@@ -72,20 +89,16 @@ def register():
     password = data.get("password")
     confirm_password = data.get("confirm_password")
 
-    # 2. Validate
+    # validate
     if not all([first_name, last_name, father_name, age, username, password, confirm_password]):
         return jsonify({"error": "All fields are required"}), 400
-
     if password != confirm_password:
         return jsonify({"error": "Passwords do not match"}), 400
-
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists"}), 400
 
-    # 3. Hash password (SIMPLE & SAFE)
     hashed_password = generate_password_hash(password)
 
-    # 4. Save user
     user = User(
         first_name=first_name,
         last_name=last_name,
@@ -106,18 +119,14 @@ def register():
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-
     username = data.get("username")
     password = data.get("password")
 
     user = User.query.filter_by(username=username).first()
-
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    # Create session
     session["user_id"] = user.id
-
     return jsonify({"message": "Login successful"}), 200
 
 

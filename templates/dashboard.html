@@ -1,0 +1,9 @@
+<h1>Welcome to Dashboard</h1>
+<button onclick="logout()">Logout</button>
+
+<script>
+function logout() {
+    fetch("/api/logout", { method: "POST" })
+        .then(() => window.location.href = "/login");
+}
+</script>
