@@ -1,9 +1,31 @@
-<h1>Welcome to Dashboard</h1>
-<button onclick="logout()">Logout</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Task Dashboard</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
 
-<script>
-function logout() {
-    fetch("/api/logout", { method: "POST" })
-        .then(() => window.location.href = "/login");
-}
-</script>
+<div class="app">
+  <header>
+    <h2>Task Manager</h2>
+    <button onclick="logout()" class="logout">Logout</button>
+  </header>
+
+  <div class="stats">
+    <div><b id="total">0</b><span>Total</span></div>
+    <div><b id="pending">0</b><span>Pending</span></div>
+    <div><b id="completed">0</b><span>Completed</span></div>
+  </div>
+
+  <div class="add-task">
+    <input id="taskInput" placeholder="What needs to be done?">
+    <button onclick="addTask()">Add</button>
+  </div>
+
+  <ul id="taskList"></ul>
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

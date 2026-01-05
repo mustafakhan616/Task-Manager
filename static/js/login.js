@@ -18,7 +18,7 @@ document.getElementById("loginForm").addEventListener("submit", async function(e
         const result = await response.json();
 
         if (response.ok) {
-            window.location.href = "/dashboard-page";  // your dashboard route
+            window.location.href = "/dashboard";  // your dashboard route
         } else {
             document.getElementById("error").innerText = result.error;
         }
